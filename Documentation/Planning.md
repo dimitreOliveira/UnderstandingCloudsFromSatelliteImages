@@ -8,16 +8,16 @@
 
 ## 1. Literature review (read some kernels and relevant content related to the competition).
 - ### Relevant content:
-- [Medium post about the competition](https://towardsdatascience.com/sugar-flower-fish-or-gravel-now-a-kaggle-competition-8d2b6b3b118)
-- [Paper related about the competition research](https://arxiv.org/pdf/1906.01906.pdf)
-- [[Git] UNet-Segmentation-in-Keras-TensorFlow](https://github.com/nikhilroxtomar/UNet-Segmentation-in-Keras-TensorFlow/blob/master/unet-segmentation.ipynb)
-- [[Git] unet for image segmentation](https://github.com/zhixuhao/unet)
-- [[Git] keras-unet](https://github.com/karolzak/keras-unet)
-- [[Git] segmentation_models](https://github.com/qubvel/segmentation_models)
+  - [Medium post about the competition](https://towardsdatascience.com/sugar-flower-fish-or-gravel-now-a-kaggle-competition-8d2b6b3b118)
+  - [Paper related about the competition research](https://arxiv.org/pdf/1906.01906.pdf)
+  - [[Git] UNet-Segmentation-in-Keras-TensorFlow](https://github.com/nikhilroxtomar/UNet-Segmentation-in-Keras-TensorFlow/blob/master/unet-segmentation.ipynb)
+  - [[Git] unet for image segmentation](https://github.com/zhixuhao/unet)
+  - [[Git] keras-unet](https://github.com/karolzak/keras-unet)
+  - [[Git] segmentation_models](https://github.com/qubvel/segmentation_models)
 
 - ### Kernels:
-- [Segmentation in PyTorch using convenient tools](https://www.kaggle.com/artgor/segmentation-in-pytorch-using-convenient-tools)
-- [Cloud: ConvexHull& Polygon PostProcessing (No GPU)](https://www.kaggle.com/ratthachat/cloud-convexhull-polygon-postprocessing-no-gpu)
+  - [Segmentation in PyTorch using convenient tools](https://www.kaggle.com/artgor/segmentation-in-pytorch-using-convenient-tools)
+  - [Cloud: ConvexHull& Polygon PostProcessing (No GPU)](https://www.kaggle.com/ratthachat/cloud-convexhull-polygon-postprocessing-no-gpu)
  
 - ### Insights:
  - #### Positive Insights
