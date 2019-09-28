@@ -20,5 +20,7 @@
   - [Cloud: ConvexHull& Polygon PostProcessing (No GPU)](https://www.kaggle.com/ratthachat/cloud-convexhull-polygon-postprocessing-no-gpu)
  
 - ### Insights:
- - #### Positive Insights
- - #### Negative Insights
+  - #### Positive Insights
+    - For patterns like 'Sugar' or 'Gravel' its not expected any specific orientation and rotation augmentation might be applied to the images as well.
+  - #### Negative Insights
+    - Fish-pattern often seems to be oriented in east-west-direction (right to left).
