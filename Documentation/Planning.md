@@ -14,6 +14,8 @@
   - [[Git] unet for image segmentation](https://github.com/zhixuhao/unet)
   - [[Git] keras-unet](https://github.com/karolzak/keras-unet)
   - [[Git] segmentation_models](https://github.com/qubvel/segmentation_models)
+  - [Losses for Image Segmentation](https://lars76.github.io/neural-networks/object-detection/losses-for-segmentation/)
+  - [Thread abour Dice, F-Score and IOU](https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou)
 
 - ### Kernels:
   - [Segmentation in PyTorch using convenient tools](https://www.kaggle.com/artgor/segmentation-in-pytorch-using-convenient-tools)
