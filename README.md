@@ -5,6 +5,8 @@ The goal of this repository is to use image segmentation techniques to models ca
 
 ### Published Kaggle kernels:
  - [Understanding Clouds - EDA and Keras U-Net](https://www.kaggle.com/dimitreoliveira/understanding-clouds-eda-and-keras-u-net)
+ - [Cloud Segmentation with utility scripts and Keras](https://www.kaggle.com/dimitreoliveira/cloud-segmentation-with-utility-scripts-and-keras)
+ - [cloud images segmentation utillity script](https://www.kaggle.com/dimitreoliveira/cloud-images-segmentation-utillity-script)
 
 ### What you will find
 - Documentation [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Documentation)
