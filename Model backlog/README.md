@@ -36,3 +36,4 @@
 |34-unet-efficientnetb4-256x384|0.642|0.641|0.636|???|Kaggle|
 |35-unet-efficientnetb4-256x384-normalization|0.375|0.374|0.639|???|Kaggle|
 |36-unet-efficientnetb4-256x384-warmup|0.454|0.453|0.597|???|Kaggle|
+|40-UNet DenseNet169 - TTA|0.454|0.611|0.603|???|Kaggle|
