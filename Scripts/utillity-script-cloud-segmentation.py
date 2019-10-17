@@ -8,28 +8,31 @@ import warnings
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from skimage import exposure
 import multiprocessing as mp
 import albumentations as albu
 import matplotlib.pyplot as plt
 from tensorflow import set_random_seed
-from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
 from keras import backend as K
 from keras.utils import Sequence
+from keras.layers import Input, average
 from keras import optimizers, applications
 from keras.models import Model, load_model
 from keras.losses import binary_crossentropy
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Dense, GlobalAveragePooling2D, Input
-from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, Callback
-
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 
 # Required repositories
 os.system('pip install segmentation-models')
 os.system('pip install keras-rectified-adam')
+os.system('pip install tta-wrapper')
 
 from keras_radam import RAdam
 import segmentation_models as sm
+from tta_wrapper import tta_segmentation
 
 # Misc
 def seed_everything(seed=0):
@@ -233,14 +236,13 @@ def post_process(probability, threshold=0.5, min_size=10000):
     return predictions
 
 # Prediction evaluation
-def get_metrics(model, target_df, df, df_images_dest_path, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, set_name='Complete set'):
-    class_names = ['Fish', 'Flower', 'Gravel', 'Sugar']
+def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', column_names=['Class', 'Dice', 'Dice Post']):
     metrics = []
 
-    for class_name in class_names:
+    for class_name in label_columns:
         metrics.append([class_name, 0, 0])
 
-    metrics_df = pd.DataFrame(metrics, columns=['Class', 'Dice', 'Dice Post'])
+    metrics_df = pd.DataFrame(metrics, columns=column_names)
     
     for i in range(0, df.shape[0], 500):
         batch_idx = list(range(i, min(df.shape[0], i + 500)))
@@ -256,6 +258,8 @@ def get_metrics(model, target_df, df, df_images_dest_path, tresholds, min_mask_s
                       n_channels=model.input_shape[3],
                       n_classes=N_CLASSES,
                       preprocessing=preprocessing,
+                      adjust_fn=adjust_fn,
+                      adjust_param=adjust_param,
                       seed=seed,
                       mode='fit',
                       shuffle=False)
@@ -282,10 +286,10 @@ def get_metrics(model, target_df, df, df_images_dest_path, tresholds, min_mask_s
                     dice_score_post = dice_coefficient(sample_pred_post, sample_mask)
                 class_score.append(dice_score)
                 class_score_post.append(dice_score_post)
-            metrics_df.loc[metrics_df['Class'] == class_names[class_index], 'Dice'] += np.mean(class_score) * ratio
-            metrics_df.loc[metrics_df['Class'] == class_names[class_index], 'Dice Post'] += np.mean(class_score_post) * ratio
+            metrics_df.loc[metrics_df[column_names[0]] == label_columns[class_index], column_names[1]] += np.mean(class_score) * ratio
+            metrics_df.loc[metrics_df[column_names[0]] == label_columns[class_index], column_names[2]] += np.mean(class_score_post) * ratio
 
-    metrics_df = metrics_df.append({'Class':set_name, 'Dice':np.mean(metrics_df['Dice'].values), 'Dice Post':np.mean(metrics_df['Dice Post'].values)}, ignore_index=True).set_index('Class')
+    metrics_df = metrics_df.append({column_names[0]:set_name, column_names[1]:np.mean(metrics_df[column_names[1]].values), column_names[2]:np.mean(metrics_df[column_names[2]].values)}, ignore_index=True).set_index(column_names[0])
     
     return metrics_df
 
@@ -361,10 +365,90 @@ def classification_tunning(y_true, y_pred, label_columns, threshold_grid=np.aran
 
   return best_tresholds
 
+def segmentation_tunning(model, target_df, df, df_images_dest_path, label_columns, mask_grid, threshold_grid=np.arange(0, 1, .01), N_CLASSES=4, preprocessing=None, adjust_fn=None, adjust_param=None, seed=0, column_names=['Class', 'Threshold', 'Mask size', 'Dice'], print_score=True):
+    metrics = []
+
+    for label in label_columns:
+        for threshold in threshold_grid:
+            for mask_size in mask_grid:
+                metrics.append([label, threshold, mask_size, 0])
+
+    metrics_df = pd.DataFrame(metrics, columns=column_names)
+
+    for i in range(0, df.shape[0], 500):
+        batch_idx = list(range(i, min(df.shape[0], i + 500)))
+        batch_set = df[batch_idx[0]: batch_idx[-1]+1]
+        ratio = len(batch_set) / len(df)
+
+        generator = DataGenerator(
+                      directory=df_images_dest_path,
+                      dataframe=batch_set,
+                      target_df=target_df,
+                      batch_size=len(batch_set), 
+                      target_size=model.input_shape[1:3],
+                      n_channels=model.input_shape[3],
+                      n_classes=N_CLASSES,
+                      preprocessing=preprocessing,
+                      adjust_fn=adjust_fn,
+                      adjust_param=adjust_param,
+                      seed=seed,
+                      mode='fit',
+                      shuffle=False)
+
+        x, y = generator.__getitem__(0)
+        preds = model.predict(x)
+
+        for class_index, label in enumerate(label_columns):
+            class_score = []
+            label_class = y[..., class_index]
+            pred_class = preds[..., class_index]
+            for threshold in threshold_grid:
+                for mask_size in mask_grid:
+                    mask_score = []
+                    for index in range(len(batch_idx)):
+                        label_mask = label_class[index, ]
+                        pred_mask = pred_class[index, ]
+                        pred_mask = post_process(pred_mask, threshold=threshold, min_size=mask_size)
+                        dice_score = dice_coefficient(pred_mask, label_mask)
+                        if (pred_mask.sum() == 0) & (label_mask.sum() == 0):
+                            dice_score = 1.
+                        mask_score.append(dice_score)
+                    metrics_df.loc[(metrics_df[column_names[0]] == label) & (metrics_df[column_names[1]] == threshold) & 
+                                   (metrics_df[column_names[2]] == mask_size), column_names[3]] += np.mean(mask_score) * ratio
+                    
+    best_tresholds = []
+    best_masks = []
+    best_dices = []
+    for index, label in enumerate(label_columns):
+        metrics_df_lbl = metrics_df[metrics_df[column_names[0]] == label_columns[index]]
+        optimal_values_lbl = metrics_df_lbl.loc[metrics_df_lbl[column_names[3]].idxmax()].values
+        best_tresholds.append(optimal_values_lbl[1])
+        best_masks.append(optimal_values_lbl[2])
+        best_dices.append(optimal_values_lbl[3])
+
+    if print_score:
+        for index, name in enumerate(label_columns):
+            print('%s treshold=%.2f mask size=%d Dice=%.3f' % (name, best_tresholds[index], best_masks[index], best_dices[index]))
+            
+    return best_tresholds, best_masks
+
+# Model utils
+def ensemble_models(input_shape, model_list, rename_model=False):
+    if rename_model:
+        for index, model in enumerate(model_list):
+            model.name = 'ensemble_' + str(index) + '_' + model.name
+            for layer in model.layers:
+                layer.name = 'ensemble_' + str(index) + '_' + layer.name
+        
+    inputs = Input(shape=input_shape)
+    outputs = average([model(inputs) for model in model_list])
+    
+    return Model(inputs=inputs, outputs=outputs)
+
 # Data generator
 class DataGenerator(Sequence):
     def __init__(self, dataframe, directory, batch_size, n_channels, target_size,  n_classes, 
-                 mode='fit', target_df=None, shuffle=True, preprocessing=None, augmentation=None, seed=0):
+                 mode='fit', target_df=None, shuffle=True, preprocessing=None, augmentation=None, adjust_fn=None, adjust_param=None, seed=0):
         
         self.batch_size = batch_size
         self.dataframe = dataframe
@@ -375,8 +459,10 @@ class DataGenerator(Sequence):
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.shuffle = shuffle
-        self.augmentation = augmentation
         self.preprocessing = preprocessing
+        self.augmentation = augmentation
+        self.adjust_fn = adjust_fn
+        self.adjust_param = adjust_param
         self.seed = seed
         self.mask_shape = (1400, 2100)
         self.list_IDs = self.dataframe.index
@@ -418,6 +504,9 @@ class DataGenerator(Sequence):
             img_path = self.directory + img_name
             img = cv2.imread(img_path)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+            if (not self.adjust_fn is None) & (not self.adjust_param is None):
+                img = self.adjust_fn(img, self.adjust_param)
 
             if self.preprocessing:
                 img = self.preprocessing(img)
@@ -450,237 +539,3 @@ class DataGenerator(Sequence):
         Y_aug = composed['mask']
         
         return X_aug, Y_aug
-    
-# Learning rate schedulers
-class CyclicLR(Callback):
-    """This callback implements a cyclical learning rate policy (CLR).
-    The method cycles the learning rate between two boundaries with
-    some constant frequency.
-    # Arguments
-        base_lr: initial learning rate which is the
-            lower boundary in the cycle.
-        max_lr: upper boundary in the cycle. Functionally,
-            it defines the cycle amplitude (max_lr - base_lr).
-            The lr at any cycle is the sum of base_lr
-            and some scaling of the amplitude; therefore
-            max_lr may not actually be reached depending on
-            scaling function.
-        step_size: number of training iterations per
-            half cycle. Authors suggest setting step_size
-            2-8 x training iterations in epoch.
-        mode: one of {triangular, triangular2, exp_range}.
-            Default 'triangular'.
-            Values correspond to policies detailed above.
-            If scale_fn is not None, this argument is ignored.
-        gamma: constant in 'exp_range' scaling function:
-            gamma**(cycle iterations)
-        scale_fn: Custom scaling policy defined by a single
-            argument lambda function, where
-            0 <= scale_fn(x) <= 1 for all x >= 0.
-            mode paramater is ignored
-        scale_mode: {'cycle', 'iterations'}.
-            Defines whether scale_fn is evaluated on
-            cycle number or cycle iterations (training
-            iterations since start of cycle). Default is 'cycle'.
-    The amplitude of the cycle can be scaled on a per-iteration or
-    per-cycle basis.
-    This class has three built-in policies, as put forth in the paper.
-    "triangular":
-        A basic triangular cycle w/ no amplitude scaling.
-    "triangular2":
-        A basic triangular cycle that scales initial amplitude by half each cycle.
-    "exp_range":
-        A cycle that scales initial amplitude by gamma**(cycle iterations) at each
-        cycle iteration.
-    For more detail, please see paper.
-    # Example for CIFAR-10 w/ batch size 100:
-        ```python
-            clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                                step_size=2000., mode='triangular')
-            model.fit(X_train, Y_train, callbacks=[clr])
-        ```
-    Class also supports custom scaling functions:
-        ```python
-            clr_fn = lambda x: 0.5*(1+np.sin(x*np.pi/2.))
-            clr = CyclicLR(base_lr=0.001, max_lr=0.006,
-                                step_size=2000., scale_fn=clr_fn,
-                                scale_mode='cycle')
-            model.fit(X_train, Y_train, callbacks=[clr])
-        ```
-    # References
-      - [Cyclical Learning Rates for Training Neural Networks](
-      https://arxiv.org/abs/1506.01186)
-    """
-
-    def __init__(self,
-                base_lr=0.001,
-                max_lr=0.006,
-                step_size=2000.,
-                mode='triangular',
-                gamma=1.,
-                scale_fn=None,
-                scale_mode='cycle'):
-        super(CyclicLR, self).__init__()
-
-        if mode not in ['triangular', 'triangular2', 'exp_range']:
-            raise KeyError("mode must be one of 'triangular', ""'triangular2', or 'exp_range'")
-        self.base_lr = base_lr
-        self.max_lr = max_lr
-        self.step_size = step_size
-        self.mode = mode
-        self.gamma = gamma
-        if scale_fn is None:
-            if self.mode == 'triangular':
-                self.scale_fn = lambda x: 1.
-                self.scale_mode = 'cycle'
-            elif self.mode == 'triangular2':
-                self.scale_fn = lambda x: 1 / (2.**(x - 1))
-                self.scale_mode = 'cycle'
-            elif self.mode == 'exp_range':
-                self.scale_fn = lambda x: gamma ** x
-                self.scale_mode = 'iterations'
-        else:
-            self.scale_fn = scale_fn
-            self.scale_mode = scale_mode
-        self.clr_iterations = 0.
-        self.trn_iterations = 0.
-        self.history = {}
-
-        self._reset()
-
-    def _reset(self, new_base_lr=None, new_max_lr=None,
-               new_step_size=None):
-        if new_base_lr is not None:
-            self.base_lr = new_base_lr
-        if new_max_lr is not None:
-            self.max_lr = new_max_lr
-        if new_step_size is not None:
-            self.step_size = new_step_size
-        self.clr_iterations = 0.
-
-    def clr(self):
-        cycle = np.floor(1 + self.clr_iterations / (2 * self.step_size))
-        x = np.abs(self.clr_iterations / self.step_size - 2 * cycle + 1)
-        if self.scale_mode == 'cycle':
-            return self.base_lr + (self.max_lr - self.base_lr) * \
-                np.maximum(0, (1 - x)) * self.scale_fn(cycle)
-        else:
-            return self.base_lr + (self.max_lr - self.base_lr) * \
-                np.maximum(0, (1 - x)) * self.scale_fn(self.clr_iterations)
-
-    def on_train_begin(self, logs={}):
-        logs = logs or {}
-
-        if self.clr_iterations == 0:
-            K.set_value(self.model.optimizer.lr, self.base_lr)
-        else:
-            K.set_value(self.model.optimizer.lr, self.clr())
-
-    def on_batch_end(self, epoch, logs=None):
-
-        logs = logs or {}
-        self.trn_iterations += 1
-        self.clr_iterations += 1
-        K.set_value(self.model.optimizer.lr, self.clr())
-
-        self.history.setdefault(
-            'lr', []).append(
-            K.get_value(
-                self.model.optimizer.lr))
-        self.history.setdefault('iterations', []).append(self.trn_iterations)
-
-        for k, v in logs.items():
-            self.history.setdefault(k, []).append(v)
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs['lr'] = K.get_value(self.model.optimizer.lr)
-        
-def cosine_decay_with_warmup(global_step,
-                             learning_rate_base,
-                             total_steps,
-                             warmup_learning_rate=0.0,
-                             warmup_steps=0,
-                             hold_base_rate_steps=0):
-    """
-    Cosine decay schedule with warm up period.
-    In this schedule, the learning rate grows linearly from warmup_learning_rate
-    to learning_rate_base for warmup_steps, then transitions to a cosine decay
-    schedule.
-    :param global_step {int}: global step.
-    :param learning_rate_base {float}: base learning rate.
-    :param total_steps {int}: total number of training steps.
-    :param warmup_learning_rate {float}: initial learning rate for warm up. (default: {0.0}).
-    :param warmup_steps {int}: number of warmup steps. (default: {0}).
-    :param hold_base_rate_steps {int}: Optional number of steps to hold base learning rate before decaying. (default: {0}).
-    :param global_step {int}: global step.
-    :Returns : a float representing learning rate.
-    :Raises ValueError: if warmup_learning_rate is larger than learning_rate_base, or if warmup_steps is larger than total_steps.
-    """
-
-    if total_steps < warmup_steps:
-        raise ValueError('total_steps must be larger or equal to warmup_steps.')
-    learning_rate = 0.5 * learning_rate_base * (1 + np.cos(
-        np.pi *
-        (global_step - warmup_steps - hold_base_rate_steps
-         ) / float(total_steps - warmup_steps - hold_base_rate_steps)))
-    if hold_base_rate_steps > 0:
-        learning_rate = np.where(global_step > warmup_steps + hold_base_rate_steps,
-                                 learning_rate, learning_rate_base)
-    if warmup_steps > 0:
-        if learning_rate_base < warmup_learning_rate:
-            raise ValueError('learning_rate_base must be larger or equal to warmup_learning_rate.')
-        slope = (learning_rate_base - warmup_learning_rate) / warmup_steps
-        warmup_rate = slope * global_step + warmup_learning_rate
-        learning_rate = np.where(global_step < warmup_steps, warmup_rate,
-                                 learning_rate)
-    return np.where(global_step > total_steps, 0.0, learning_rate)
-
-
-class WarmUpCosineDecayScheduler(Callback):
-    """Cosine decay with warmup learning rate scheduler"""
-
-    def __init__(self,
-                 learning_rate_base,
-                 total_steps,
-                 global_step_init=0,
-                 warmup_learning_rate=0.0,
-                 warmup_steps=0,
-                 hold_base_rate_steps=0,
-                 verbose=0):
-        """
-        Constructor for cosine decay with warmup learning rate scheduler.
-        :param learning_rate_base {float}: base learning rate.
-        :param total_steps {int}: total number of training steps.
-        :param global_step_init {int}: initial global step, e.g. from previous checkpoint.
-        :param warmup_learning_rate {float}: initial learning rate for warm up. (default: {0.0}).
-        :param warmup_steps {int}: number of warmup steps. (default: {0}).
-        :param hold_base_rate_steps {int}: Optional number of steps to hold base learning rate before decaying. (default: {0}).
-        :param verbose {int}: quiet, 1: update messages. (default: {0}).
-        """
-
-        super(WarmUpCosineDecayScheduler, self).__init__()
-        self.learning_rate_base = learning_rate_base
-        self.total_steps = total_steps
-        self.global_step = global_step_init
-        self.warmup_learning_rate = warmup_learning_rate
-        self.warmup_steps = warmup_steps
-        self.hold_base_rate_steps = hold_base_rate_steps
-        self.verbose = verbose
-        self.learning_rates = []
-
-    def on_batch_end(self, batch, logs=None):
-        self.global_step = self.global_step + 1
-        lr = K.get_value(self.model.optimizer.lr)
-        self.learning_rates.append(lr)
-
-    def on_batch_begin(self, batch, logs=None):
-        lr = cosine_decay_with_warmup(global_step=self.global_step,
-                                      learning_rate_base=self.learning_rate_base,
-                                      total_steps=self.total_steps,
-                                      warmup_learning_rate=self.warmup_learning_rate,
-                                      warmup_steps=self.warmup_steps,
-                                      hold_base_rate_steps=self.hold_base_rate_steps)
-        K.set_value(self.model.optimizer.lr, lr)
-        if self.verbose > 0:
-            print('\nBatch %02d: setting learning rate to %s.' % (self.global_step + 1, lr))
