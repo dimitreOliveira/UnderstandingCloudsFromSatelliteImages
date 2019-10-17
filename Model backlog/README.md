@@ -37,3 +37,8 @@
 |35-unet-efficientnetb4-256x384-normalization|0.375|0.374|0.639|???|Kaggle|
 |36-unet-efficientnetb4-256x384-warmup|0.454|0.453|0.597|???|Kaggle|
 |40-UNet DenseNet169 - TTA|0.454|0.611|0.603|???|Kaggle|
+|46-UNet DenseNet169 - Gamma contrast adjustment|0.620|0.621|0.624|???|Kaggle|
+|47-UNet DenseNet169 - Log contrast adjustment|0.671|0.644|0.641|???|Kaggle|
+|48-UNet DenseNet169 - No contrast adjustment|0.629|0.632|0.620|???|Kaggle|
+|49-UNet ResNet18 - Gamma contrast adjustment|0.677|0.629|0.516|???|Kaggle|
+|50-UNet ResNet18 - Log contrast adjustment|0.708|0.637|0.541|???|Kaggle|
