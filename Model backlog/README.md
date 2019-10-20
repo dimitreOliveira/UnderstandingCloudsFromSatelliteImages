@@ -32,13 +32,35 @@
 |19-unet-resnet152-more-augmentation|0.640|0.620|0.624|???|Kaggle|
 |20-unet-resnet152-clean-dataset|0.627|0.613|0.609|???|Kaggle|
 |21-unet-densenet169-rotate|0.643|0.625|0.618|???|Kaggle|
+|22-unet-densenet169|0.654|0.643|0.637|???|Colab|
+|23-unet-densenet169-pt2|000|000|000|???|Colab|
+|24-unet-densenet121|0.664|0.651|0.643|???|Colab|
+|25-unet-densenet121-pt2|000|000|000|???|Colab|
+|26-unet-densenet121-pt3|000|000|000|???|Colab|
+|27-unet-densenet201|000|000|000|???|Colab|
 |28-unet-densenet169-randomsizedcrop-256x384|0.648|0.637|0.637|???|Kaggle|
+|29-unet-mobilenetv2|000|000|000|???|Colab|
+|30-linknet-densenet169|000|000|000|???|Colab|
+|31-[5-Fold]-ResNet18-Gamma_256x384 <br>- [Fold1] <br>- [Fold2] <br>- [Fold3] <br>- [Fold4] <br>- [Fold5]|0.673 <br>- 0.666<br>- 000<br>- 000<br>- 000<br>- 000|0.680 <br>- 0.678<br>- 000<br>- 000<br>- 000<br>- 000|0.642<br>- 0.639<br>- 000<br>- 000<br>- 000<br>- 000|???<br>- ???<br>- ???<br>- ???<br>- ???<br>- ???|Local|
+|32-unet-resnext50|000|000|000|???|Local|
+|33-unet-resnet34|000|000|000|???|Local|
 |34-unet-efficientnetb4-256x384|0.642|0.641|0.636|???|Kaggle|
 |35-unet-efficientnetb4-256x384-normalization|0.375|0.374|0.639|???|Kaggle|
 |36-unet-efficientnetb4-256x384-warmup|0.454|0.453|0.597|???|Kaggle|
+|37-fpnet-densenet169|000|000|000|???|Colab|
+|38-unet-densenet169|000|000|000|???|Local|
+|39-unet-densenet169 - lower LR|000|000|000|???|Local|
 |40-UNet DenseNet169 - TTA|0.454|0.611|0.603|???|Kaggle|
+|41-[5-Fold]unet-densenet169_256x384 <br>- [Fold1] <br>- [Fold2] <br>- [Fold3] <br>- [Fold4] <br>- [Fold5]|000 <br>- 0.658<br>- 000<br>- 000<br>- 000<br>- 000|000 <br>- 0.676<br>- 000<br>- 000<br>- 000<br>- 000|000<br>- 0.638<br>- 000<br>- 000<br>- 000<br>- 000|???<br>- ???<br>- ???<br>- ???<br>- ???<br>- ???|Colab|
+|42-[5-Fold]unet-densenet169_384x480 <br>- [Fold1] <br>- [Fold2] <br>- [Fold3] <br>- [Fold4] <br>- [Fold5]|000<br>- 0.655<br>- 000<br>- 000<br>- 000<br>- 000|000<br>- 0.666<br>- 000<br>- 000<br>- 000<br>- 000|000<br>- 0.652<br>- 000<br>- 000<br>- 000<br>- 000|???<br>- ???<br>- ???<br>- ???<br>- ???<br>- ???|Colab|
+|43-unet-resnet18_384x480|000|000|000|???|Colab|
+|44-linknet-resnet18_384x480|000|000|000|???|Colab|
+|45-pspnet-resnet18_384x480|000|000|000|???|Colab|
 |46-UNet DenseNet169 - Gamma contrast adjustment|0.620|0.621|0.624|???|Kaggle|
 |47-UNet DenseNet169 - Log contrast adjustment|0.671|0.644|0.641|???|Kaggle|
 |48-UNet DenseNet169 - No contrast adjustment|0.629|0.632|0.620|???|Kaggle|
 |49-UNet ResNet18 - Gamma contrast adjustment|0.677|0.629|0.516|???|Kaggle|
 |50-UNet ResNet18 - Log contrast adjustment|0.708|0.637|0.541|???|Kaggle|
+|51-fpn-resnet18_384x480|000|000|000|???|Colab|
+|52-unet-resnet152|000|000|000|???|Local|
+|53-unet-resnet50|000|000|000|???|Local|
