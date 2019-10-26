@@ -217,8 +217,8 @@ def get_metrics(model, target_df, df, df_images_dest_path, tresholds, min_mask_s
 
     metrics_df = pd.DataFrame(metrics, columns=['Class', 'Dice', 'Dice Post'])
     
-    for i in range(0, df.shape[0], 500):
-        batch_idx = list(range(i, min(df.shape[0], i + 500)))
+    for i in range(0, df.shape[0], 300):
+        batch_idx = list(range(i, min(df.shape[0], i + 300)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
 

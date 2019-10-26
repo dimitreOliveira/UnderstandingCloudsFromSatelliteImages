@@ -14,7 +14,7 @@ import albumentations as albu
 import matplotlib.pyplot as plt
 from tensorflow import set_random_seed
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, fbeta_score
 from keras import backend as K
 from keras.utils import Sequence
 from keras.layers import Input, average
@@ -190,7 +190,7 @@ def pre_process_set(df, preprocess_fn):
 #             preprocess_image(image_id, test_base_path, test_images_dest_path, HEIGHT, WIDTH)
 
 # Model evaluation
-def get_metrics_classification(df, preds, label_columns, threshold=0.5, show_report=True):
+def get_metrics_classification(df, preds, label_columns, threshold_list=[.5, .5, .5, .5], show_report=True):
   accuracy = []
   precision = []
   recall = []
@@ -198,8 +198,8 @@ def get_metrics_classification(df, preds, label_columns, threshold=0.5, show_rep
   for index, label in enumerate(label_columns):
     print('Metrics for: %s' % label)
     if show_report:
-      print(classification_report(df[label], (preds[:,index] > threshold).astype(int), output_dict=False))
-    metrics = classification_report(df[label], (preds[:,index] > threshold).astype(int), output_dict=True)
+      print(classification_report(df[label], (preds[:,index] > best_tresholds[index]).astype(int), output_dict=False))
+    metrics = classification_report(df[label], (preds[:,index] > best_tresholds[index]).astype(int), output_dict=True)
     accuracy.append(metrics['accuracy'])
     precision.append(metrics['1']['precision'])
     recall.append(metrics['1']['recall'])
@@ -244,8 +244,8 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
 
     metrics_df = pd.DataFrame(metrics, columns=column_names)
     
-    for i in range(0, df.shape[0], 500):
-        batch_idx = list(range(i, min(df.shape[0], i + 500)))
+    for i in range(0, df.shape[0], 100):
+        batch_idx = list(range(i, min(df.shape[0], i + 100)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
 
@@ -266,6 +266,70 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
 
         x, y = generator.__getitem__(0)
         preds = model.predict(x)
+        
+        for class_index in range(N_CLASSES):
+            class_score = []
+            class_score_post = []
+            mask_class = y[..., class_index]
+            pred_class = preds[..., class_index]
+            for index in range(len(batch_idx)):
+                sample_mask = mask_class[index, ]
+                sample_pred = pred_class[index, ]
+                sample_pred_post = post_process(sample_pred, threshold=tresholds[class_index], min_size=min_mask_sizes[class_index])
+                if (sample_mask.sum() == 0) & (sample_pred.sum() == 0):
+                    dice_score = 1.
+                else:
+                    dice_score = dice_coefficient(sample_pred, sample_mask)
+                if (sample_mask.sum() == 0) & (sample_pred_post.sum() == 0):
+                    dice_score_post = 1.
+                else:
+                    dice_score_post = dice_coefficient(sample_pred_post, sample_mask)
+                class_score.append(dice_score)
+                class_score_post.append(dice_score_post)
+            metrics_df.loc[metrics_df[column_names[0]] == label_columns[class_index], column_names[1]] += np.mean(class_score) * ratio
+            metrics_df.loc[metrics_df[column_names[0]] == label_columns[class_index], column_names[2]] += np.mean(class_score_post) * ratio
+
+    metrics_df = metrics_df.append({column_names[0]:set_name, column_names[1]:np.mean(metrics_df[column_names[1]].values), column_names[2]:np.mean(metrics_df[column_names[2]].values)}, ignore_index=True).set_index(column_names[0])
+    
+    return metrics_df
+
+def get_metrics_ensemble(model_list, target_df, df, df_images_dest_path, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', column_names=['Class', 'Dice', 'Dice Post']):
+    metrics = []
+
+    for class_name in label_columns:
+        metrics.append([class_name, 0, 0])
+
+    metrics_df = pd.DataFrame(metrics, columns=column_names)
+    
+    for i in range(0, df.shape[0], 100):
+        batch_idx = list(range(i, min(df.shape[0], i + 100)))
+        batch_set = df[batch_idx[0]: batch_idx[-1]+1]
+        ratio = len(batch_set) / len(df)
+        
+        target_size = model_list[0].input_shape[1:3]
+        n_channels = model_list[0].input_shape[3]
+
+        generator = DataGenerator(
+                      directory=df_images_dest_path,
+                      dataframe=batch_set,
+                      target_df=target_df,
+                      batch_size=len(batch_set), 
+                      target_size=target_size,
+                      n_channels=n_channels,
+                      n_classes=N_CLASSES,
+                      preprocessing=preprocessing,
+                      adjust_fn=adjust_fn,
+                      adjust_param=adjust_param,
+                      seed=seed,
+                      mode='fit',
+                      shuffle=False)
+
+        x, y = generator.__getitem__(0)
+        preds = np.zeros((len(batch_set), *target_size, N_CLASSES))
+        for model in model_list:
+            preds += model.predict(x)
+
+        preds /= len(model_list)
         
         for class_index in range(N_CLASSES):
             class_score = []
@@ -338,9 +402,41 @@ def inspect_predictions(df, image_ids, images_dest_path, pred_col=None, label_co
                 axes[i+1].imshow(mask)
                 axes[i+1].set_title(sample_df[title_col].values[i], fontsize=18)
                 axes[i+1].axis('off')
-                
+
+def inspect_predictions_class(df, image_ids, images_dest_path, pred_col=None, label_col='EncodedPixels', title_col='Image_Label', img_shape=(525, 350), figsize=(22, 6)):
+  for sample in image_ids:
+    sample_df = df[df['image'] == sample]
+    fig, axes = plt.subplots(2, 5, figsize=figsize)
+    img = cv2.imread(images_dest_path + sample_df['image'].values[0])
+    img = cv2.resize(img, img_shape)
+    axes[0][0].imshow(img)
+    axes[1][0].imshow(img)
+    axes[0][0].set_title('Label', fontsize=16)
+    axes[1][0].set_title('Predicted', fontsize=16)
+    axes[0][0].axis('off')
+    axes[1][0].axis('off')
+    for i in range(4):
+        mask = sample_df[label_col].values[i]
+        pred_mask = sample_df[pred_col].values[i]
+        try:
+            math.isnan(mask)
+            mask = np.zeros((img_shape[1], img_shape[0]))
+        except:
+            mask = rle_decode(mask)            
+        try:
+            math.isnan(pred_mask)
+            pred_mask = np.zeros((img_shape[1], img_shape[0]))
+        except:
+            pred_mask = rle_decode(pred_mask)
+        axes[0][i+1].imshow(mask)
+        axes[1][i+1].imshow(pred_mask)
+        axes[0][i+1].set_title(sample_df[title_col].values[i], fontsize=18)
+        axes[1][i+1].set_title(sample_df[title_col].values[i], fontsize=18)
+        axes[0][i+1].axis('off')
+        axes[1][i+1].axis('off')
+
 # Model tunning
-def classification_tunning(y_true, y_pred, label_columns, threshold_grid=np.arange(0, 1, .01), column_names=['Class', 'Threshold', 'Score'], print_score=True):
+def classification_tunning(y_true, y_pred, label_columns, beta=0.25, threshold_grid=np.arange(0, 1, .01), column_names=['Class', 'Threshold', 'Score'], print_score=True):
   metrics = []
   for label in label_columns:
       for threshold in threshold_grid:
@@ -349,7 +445,7 @@ def classification_tunning(y_true, y_pred, label_columns, threshold_grid=np.aran
   metrics_df = pd.DataFrame(metrics, columns=column_names)
   for index, label in enumerate(label_columns):
       for thr in threshold_grid:
-          metrics_df.loc[(metrics_df[column_names[0]] == label) & (metrics_df[column_names[1]] == thr) , column_names[2]] = accuracy_score(y_true[:,index], (y_pred[:,index] > thr).astype(int))
+          metrics_df.loc[(metrics_df[column_names[0]] == label) & (metrics_df[column_names[1]] == thr) , column_names[2]] = fbeta_score(y_true[:,index], (y_pred[:,index] > thr).astype(int), beta=beta)
 
   best_tresholds = []
   best_scores = []
@@ -375,8 +471,8 @@ def segmentation_tunning(model, target_df, df, df_images_dest_path, label_column
 
     metrics_df = pd.DataFrame(metrics, columns=column_names)
 
-    for i in range(0, df.shape[0], 500):
-        batch_idx = list(range(i, min(df.shape[0], i + 500)))
+    for i in range(0, df.shape[0], 100):
+        batch_idx = list(range(i, min(df.shape[0], i + 100)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
 
