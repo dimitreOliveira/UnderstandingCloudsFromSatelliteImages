@@ -29,10 +29,14 @@ from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 os.system('pip install segmentation-models')
 os.system('pip install keras-rectified-adam')
 os.system('pip install tta-wrapper')
+os.system('pip install keras-gradient-accumulation')
+os.system('pip install efficientnet')
 
-from keras_radam import RAdam
 import segmentation_models as sm
+from keras_radam import RAdam
 from tta_wrapper import tta_segmentation
+import efficientnet.keras as efn
+from keras_gradient_accumulation import AdamAccumulated
 
 # Misc
 def seed_everything(seed=0):
@@ -198,8 +202,8 @@ def get_metrics_classification(df, preds, label_columns, threshold_list=[.5, .5,
   for index, label in enumerate(label_columns):
     print('Metrics for: %s' % label)
     if show_report:
-      print(classification_report(df[label], (preds[:,index] > best_tresholds[index]).astype(int), output_dict=False))
-    metrics = classification_report(df[label], (preds[:,index] > best_tresholds[index]).astype(int), output_dict=True)
+      print(classification_report(df[label], (preds[:,index] > threshold_list[index]).astype(int), output_dict=False))
+    metrics = classification_report(df[label], (preds[:,index] > threshold_list[index]).astype(int), output_dict=True)
     accuracy.append(metrics['accuracy'])
     precision.append(metrics['1']['precision'])
     recall.append(metrics['1']['recall'])
@@ -236,7 +240,8 @@ def post_process(probability, threshold=0.5, min_size=10000):
     return predictions
 
 # Prediction evaluation
-def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', column_names=['Class', 'Dice', 'Dice Post']):
+def get_metrics(model, target_df, df, df_images_dest_path, target_size, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, 
+                adjust_fn=None, adjust_param=None, set_name='Complete set', column_names=['Class', 'Dice', 'Dice Post'], batch_size=500):
     metrics = []
 
     for class_name in label_columns:
@@ -244,8 +249,8 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
 
     metrics_df = pd.DataFrame(metrics, columns=column_names)
     
-    for i in range(0, df.shape[0], 100):
-        batch_idx = list(range(i, min(df.shape[0], i + 100)))
+    for i in range(0, df.shape[0], batch_size):
+        batch_idx = list(range(i, min(df.shape[0], i + batch_size)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
 
@@ -254,7 +259,7 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
                       dataframe=batch_set,
                       target_df=target_df,
                       batch_size=len(batch_set), 
-                      target_size=model.input_shape[1:3],
+                      target_size=target_size,
                       n_channels=model.input_shape[3],
                       n_classes=N_CLASSES,
                       preprocessing=preprocessing,
@@ -276,6 +281,7 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
                 sample_mask = mask_class[index, ]
                 sample_pred = pred_class[index, ]
                 sample_pred_post = post_process(sample_pred, threshold=tresholds[class_index], min_size=min_mask_sizes[class_index])
+                sample_pred = post_process(sample_pred, threshold=.5, min_size=0)
                 if (sample_mask.sum() == 0) & (sample_pred.sum() == 0):
                     dice_score = 1.
                 else:
@@ -293,7 +299,9 @@ def get_metrics(model, target_df, df, df_images_dest_path, label_columns, tresho
     
     return metrics_df
 
-def get_metrics_ensemble(model_list, target_df, df, df_images_dest_path, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', column_names=['Class', 'Dice', 'Dice Post']):
+def get_metrics_ensemble(model_list, target_df, df, df_images_dest_path, target_size, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, 
+                         preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', 
+                         column_names=['Class', 'Dice', 'Dice Post'], batch_size=500):
     metrics = []
 
     for class_name in label_columns:
@@ -301,8 +309,8 @@ def get_metrics_ensemble(model_list, target_df, df, df_images_dest_path, label_c
 
     metrics_df = pd.DataFrame(metrics, columns=column_names)
     
-    for i in range(0, df.shape[0], 100):
-        batch_idx = list(range(i, min(df.shape[0], i + 100)))
+    for i in range(0, df.shape[0], batch_size):
+        batch_idx = list(range(i, min(df.shape[0], i + batch_size)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
         
@@ -461,7 +469,9 @@ def classification_tunning(y_true, y_pred, label_columns, beta=0.25, threshold_g
 
   return best_tresholds
 
-def segmentation_tunning(model, target_df, df, df_images_dest_path, label_columns, mask_grid, threshold_grid=np.arange(0, 1, .01), N_CLASSES=4, preprocessing=None, adjust_fn=None, adjust_param=None, seed=0, column_names=['Class', 'Threshold', 'Mask size', 'Dice'], print_score=True):
+def segmentation_tunning(model, target_df, df, df_images_dest_path, target_size, label_columns, mask_grid, threshold_grid=np.arange(0, 1, .01), 
+                         N_CLASSES=4, preprocessing=None, adjust_fn=None, adjust_param=None, seed=0, 
+                         column_names=['Class', 'Threshold', 'Mask size', 'Dice'], print_score=True, batch_size=500):
     metrics = []
 
     for label in label_columns:
@@ -471,8 +481,8 @@ def segmentation_tunning(model, target_df, df, df_images_dest_path, label_column
 
     metrics_df = pd.DataFrame(metrics, columns=column_names)
 
-    for i in range(0, df.shape[0], 100):
-        batch_idx = list(range(i, min(df.shape[0], i + 100)))
+    for i in range(0, df.shape[0], batch_size):
+        batch_idx = list(range(i, min(df.shape[0], i + batch_size)))
         batch_set = df[batch_idx[0]: batch_idx[-1]+1]
         ratio = len(batch_set) / len(df)
 
@@ -481,7 +491,7 @@ def segmentation_tunning(model, target_df, df, df_images_dest_path, label_column
                       dataframe=batch_set,
                       target_df=target_df,
                       batch_size=len(batch_set), 
-                      target_size=model.input_shape[1:3],
+                      target_size=target_size,
                       n_channels=model.input_shape[3],
                       n_classes=N_CLASSES,
                       preprocessing=preprocessing,
