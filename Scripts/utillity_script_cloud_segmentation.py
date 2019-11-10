@@ -8,11 +8,11 @@ import warnings
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import tensorflow as tf
 from skimage import exposure
 import multiprocessing as mp
 import albumentations as albu
 import matplotlib.pyplot as plt
-from tensorflow import set_random_seed
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score, fbeta_score
 from keras import backend as K
@@ -22,8 +22,9 @@ from keras import optimizers, applications
 from keras.models import Model, load_model
 from keras.losses import binary_crossentropy
 from keras.preprocessing.image import ImageDataGenerator
-from keras.layers import Dense, GlobalAveragePooling2D, Input
+from keras.layers import Dense, GlobalAveragePooling2D, Input, BatchNormalization
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
+
 
 # Required repositories
 os.system('pip install segmentation-models')
@@ -43,7 +44,7 @@ def seed_everything(seed=0):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
-    set_random_seed(seed)
+    tf.set_random_seed(seed)
     
     
 # Segmentation related
@@ -299,6 +300,52 @@ def get_metrics(model, target_df, df, df_images_dest_path, target_size, label_co
     
     return metrics_df
 
+def get_metrics_single_class(model, target_df, df, df_images_dest_path, target_size, treshold, min_mask_size, seed=0, preprocessing=None, 
+                             adjust_fn=None, adjust_param=None, batch_size=500):
+    
+    set_dice_score = 0
+    set_dice_score_post = 0
+    for i in range(0, df.shape[0], batch_size):
+        batch_idx = list(range(i, min(df.shape[0], i + batch_size)))
+        batch_set = df[batch_idx[0]: batch_idx[-1]+1]
+        ratio = len(batch_set) / len(df)
+
+        generator = DataGenerator(
+                      directory=df_images_dest_path,
+                      dataframe=batch_set,
+                      target_df=target_df,
+                      batch_size=len(batch_set), 
+                      target_size=target_size,
+                      n_channels=model.input_shape[3],
+                      n_classes=1,
+                      preprocessing=preprocessing,
+                      adjust_fn=adjust_fn,
+                      adjust_param=adjust_param,
+                      seed=seed,
+                      mode='fit',
+                      shuffle=False)
+
+        x, y = generator.__getitem__(0)
+        preds = model.predict(x)
+        
+        for index in range(len(batch_idx)):
+            sample_mask = y[index]
+            sample_pred = preds[index]
+            sample_pred_post = post_process(sample_pred, threshold=treshold, min_size=min_mask_size)
+            sample_pred = post_process(sample_pred, threshold=.5, min_size=0)
+            if (sample_mask.sum() == 0) & (sample_pred.sum() == 0):
+                dice_score = 1.
+            else:
+                dice_score = dice_coefficient(sample_pred, sample_mask)
+            if (sample_mask.sum() == 0) & (sample_pred_post.sum() == 0):
+                dice_score_post = 1.
+            else:
+                dice_score_post = dice_coefficient(sample_pred_post, sample_mask)
+        set_dice_score += dice_score * ratio
+        set_dice_score_post += dice_score_post * ratio
+
+    print('Dice %.3f Dice post %.3f' % (set_dice_score, set_dice_score_post))
+
 def get_metrics_ensemble(model_list, target_df, df, df_images_dest_path, target_size, label_columns, tresholds, min_mask_sizes, N_CLASSES=4, seed=0, 
                          preprocessing=None, adjust_fn=None, adjust_param=None, set_name='Complete set', 
                          column_names=['Class', 'Dice', 'Dice Post'], batch_size=500):
@@ -410,6 +457,40 @@ def inspect_predictions(df, image_ids, images_dest_path, pred_col=None, label_co
                 axes[i+1].imshow(mask)
                 axes[i+1].set_title(sample_df[title_col].values[i], fontsize=18)
                 axes[i+1].axis('off')
+                
+def inspect_predictions_single_class(df, images_dest_path, pred_cols, label_col='EncodedPixels', img_shape=(525, 350), figsize=(22, 6)):
+  if label_col in df.columns:
+    col_number = len(pred_cols)+2
+  else:
+    col_number = len(pred_cols)+1
+
+  for row in df.itertuples(index = True, name ='Pandas'): 
+    fig, axes = plt.subplots(1, col_number, figsize=figsize)
+    axes = axes.flatten()
+    img = cv2.imread(images_dest_path + getattr(row, 'image'))
+    img = cv2.resize(img, img_shape)
+    axes[0].imshow(img)
+    axes[0].set_title('Image', fontsize=16)
+
+    for index, col in enumerate(pred_cols):
+      mask = getattr(row, col)
+      try:
+          math.isnan(mask)
+          mask = np.zeros((img_shape[1], img_shape[0]))
+      except:
+          mask = rle_decode(mask, shape=(img_shape[1], img_shape[0]))
+      axes[index+1].imshow(mask)
+      axes[index+1].set_title(col, fontsize=16)
+
+    if label_col in df.columns:
+      mask = getattr(row, label_col)
+      try:
+          math.isnan(mask)
+          mask = np.zeros((img_shape[1], img_shape[0]))
+      except:
+          mask = rle_decode(mask)
+      axes[col_number-1].imshow(mask)
+      axes[col_number-1].set_title('Label', fontsize=16)
 
 def inspect_predictions_class(df, image_ids, images_dest_path, pred_col=None, label_col='EncodedPixels', title_col='Image_Label', img_shape=(525, 350), figsize=(22, 6)):
   for sample in image_ids:
@@ -538,6 +619,64 @@ def segmentation_tunning(model, target_df, df, df_images_dest_path, target_size,
             
     return best_tresholds, best_masks
 
+def segmentation_tunning_single_class(model, target_df, df, df_images_dest_path, target_size, label_columns, mask_grid, threshold_grid=np.arange(0, 1, .01), 
+                                      preprocessing=None, adjust_fn=None, adjust_param=None, seed=0, column_names=['Threshold', 'Mask size', 'Dice'], 
+                                      print_score=True, batch_size=500):
+    metrics = []
+
+    for threshold in threshold_grid:
+        for mask_size in mask_grid:
+            metrics.append([threshold, mask_size, 0])
+
+    metrics_df = pd.DataFrame(metrics, columns=column_names)
+
+    for i in range(0, df.shape[0], batch_size):
+        batch_idx = list(range(i, min(df.shape[0], i + batch_size)))
+        batch_set = df[batch_idx[0]: batch_idx[-1]+1]
+        ratio = len(batch_set) / len(df)
+
+        generator = DataGenerator(
+                      directory=df_images_dest_path,
+                      dataframe=batch_set,
+                      target_df=target_df,
+                      batch_size=len(batch_set), 
+                      target_size=target_size,
+                      n_channels=model.input_shape[3],
+                      n_classes=1,
+                      preprocessing=preprocessing,
+                      adjust_fn=adjust_fn,
+                      adjust_param=adjust_param,
+                      seed=seed,
+                      mode='fit',
+                      shuffle=False)
+
+        x, y = generator.__getitem__(0)
+        preds = model.predict(x)
+
+        for threshold in threshold_grid:
+            for mask_size in mask_grid:
+                mask_score = []
+                for index in range(len(batch_idx)):
+                    sample_label = y[index]
+                    sample_pred = preds[index]
+                    pred_mask = post_process(sample_pred, threshold=threshold, min_size=mask_size)
+                    dice_score = dice_coefficient(pred_mask, sample_label)
+                    if (pred_mask.sum() == 0) & (sample_label.sum() == 0):
+                        dice_score = 1.
+                    mask_score.append(dice_score)
+                metrics_df.loc[(metrics_df[column_names[0]] == threshold) & (metrics_df[column_names[1]] == mask_size), column_names[2]] += np.mean(mask_score) * ratio
+                    
+    best_dices = []
+    optimal_values = metrics_df.loc[metrics_df[column_names[2]].idxmax()].values
+    best_treshold = optimal_values[0]
+    best_mask = optimal_values[1]
+    best_dice = optimal_values[2]
+
+    if print_score:
+        print('Treshold=%.2f mask size=%d Dice=%.3f' % (best_treshold, best_mask, best_dice))
+            
+    return best_treshold, best_mask
+
 # Model utils
 def ensemble_models(input_shape, model_list, rename_model=False):
     if rename_model:
@@ -550,6 +689,22 @@ def ensemble_models(input_shape, model_list, rename_model=False):
     outputs = average([model(inputs) for model in model_list])
     
     return Model(inputs=inputs, outputs=outputs)
+
+def apply_tta(model, generator, steps=5):
+    step_size = generator.n//generator.batch_size
+    preds_tta = []
+    for i in range(steps):
+        generator.reset()
+        preds = model.predict_generator(generator, steps=step_size)
+        preds_tta.append(preds)
+
+    return np.mean(preds_tta, axis=0)
+
+def freeze_segmentation_model(model, **kwargs):
+    for layer in model.layers:
+        if not isinstance(layer, BatchNormalization):
+            layer.trainable = False
+            
 
 # Data generator
 class DataGenerator(Sequence):
