@@ -12,7 +12,13 @@ The goal of this repository is to use image segmentation techniques to models ca
 - Documentation [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Documentation)
   - Project working cycle and effort, relevant content and insights [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/blob/master/Documentation/Planning.md)
 - Dataset split [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Dataset%20split)
+- EDA [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/EDA)
+- Preprocess [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Preprocess)
+- Scripts [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Scripts)
 - Models [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Model%20backlog)
+  - Training [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Model%20backlog/Training)
+  - Evaluation [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Model%20backlog/Evaluation)
+  - Inference [[link]](https://github.com/dimitreOliveira/UnderstandingCloudsFromSatelliteImages/tree/master/Model%20backlog/Inference)
 
 ### Understanding Clouds from Satellite Images
 #### Can you classify cloud structures from satellites?
