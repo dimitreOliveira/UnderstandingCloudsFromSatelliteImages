@@ -11,17 +11,17 @@
 
 |Model|Train|Validation|Pb Leaderboard|Pv Leaderboard|Source|
 |-----|-----|----------|--------------|--------------|------|
-|1-UNet ResNet34 - Baseline|0.236|0.234|0.617|???|Kaggle|
-|2-UNet ResNet34 - LR Warm Up|0.245|0.241|0.611|???|Kaggle|
-|3-UNet ResNet34 - RAdam optimizer|0.218|0.222|0.528|???|Kaggle|
-|4-UNet ResNet34 - Increased augmentation|0.220|0.218|0.509|???|Kaggle|
-|5-UNet ResNet34 - Normalization|0.268|0.268|0.611|???|Kaggle|
-|6-unet-resnet34-min-mask-size-tunning|0.297|0.292|0.528|???|Kaggle|
+|1-UNet ResNet34 - Baseline|0.236|0.234|0.617|0.615|Kaggle|
+|2-UNet ResNet34 - LR Warm Up|0.245|0.241|0.611|0.610|Kaggle|
+|3-UNet ResNet34 - RAdam optimizer|0.218|0.222|0.528|0.519|Kaggle|
+|4-UNet ResNet34 - Increased augmentation|0.220|0.218|0.509|0.500|Kaggle|
+|5-UNet ResNet34 - Normalization|0.268|0.268|0.611|0.606|Kaggle|
+|6-unet-resnet34-min-mask-size-tunning|0.297|0.292|0.528|0.261|Kaggle|
 |7-unet-resnet34-no-scalling|0.219|0.218|0.255|???|Kaggle|
-|8-unet-resnet34-best-params|0.266|0.265|0.605|???|Kaggle|
-|9-unet-resnet18-best-params|0.219|0.218|0.550|???|Kaggle|
-|10-unet-resnet18-threshold-tunning|0.593|0.592|0.595|???|Kaggle|
-|11-unet-resnet18-224x224|0.634|0.620|0.619|???|Kaggle|
+|8-unet-resnet34-best-params|0.266|0.265|0.605|0.604|Kaggle|
+|9-unet-resnet18-best-params|0.219|0.218|0.550|0.549|Kaggle|
+|10-unet-resnet18-threshold-tunning|0.593|0.592|0.595|0.590|Kaggle|
+|11-unet-resnet18-224x224|0.634|0.620|0.619|0.616|Kaggle|
 |12-unet-resnet18-cosine-learning-rate|0.642|0.623|0.632|???|Kaggle|
 |13-unet-resnet18-cyclic-triangular-learning-rate|0.622|0.612|0.622|???|Kaggle|
 |14-unet-resnet18-cyclic-triangular2-lr|0.627|0.615|0.621|???|Kaggle|
