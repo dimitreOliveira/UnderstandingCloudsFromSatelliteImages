@@ -29,7 +29,7 @@ from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 # Required repositories
 os.system('pip install segmentation-models')
 os.system('pip install keras-rectified-adam')
-os.system('pip install tta-wrapper')
+os.system('pip install git+https://github.com/qubvel/tta_wrapper/')
 os.system('pip install keras-gradient-accumulation')
 os.system('pip install efficientnet')
 
@@ -700,7 +700,7 @@ def apply_tta(model, generator, steps=5):
 
     return np.mean(preds_tta, axis=0)
 
-def freeze_segmentation_model(model, **kwargs):
+def freeze_segmentation_model(model):
     for layer in model.layers:
         if not isinstance(layer, BatchNormalization):
             layer.trainable = False
