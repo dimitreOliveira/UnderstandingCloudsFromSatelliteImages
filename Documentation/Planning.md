@@ -10,12 +10,13 @@
 - ### Relevant content:
   - [Medium post about the competition](https://towardsdatascience.com/sugar-flower-fish-or-gravel-now-a-kaggle-competition-8d2b6b3b118)
   - [Paper related about the competition research](https://arxiv.org/pdf/1906.01906.pdf)
+  - [Losses for Image Segmentation](https://lars76.github.io/neural-networks/object-detection/losses-for-segmentation/)
+  - [Thread abour Dice, F-Score and IOU](https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou)
+  - [Website to yourself label images](https://www.zooniverse.org/projects/raspstephan/sugar-flower-fish-or-gravel/classify)
   - [[Git] UNet-Segmentation-in-Keras-TensorFlow](https://github.com/nikhilroxtomar/UNet-Segmentation-in-Keras-TensorFlow/blob/master/unet-segmentation.ipynb)
   - [[Git] unet for image segmentation](https://github.com/zhixuhao/unet)
   - [[Git] keras-unet](https://github.com/karolzak/keras-unet)
   - [[Git] segmentation_models](https://github.com/qubvel/segmentation_models)
-  - [Losses for Image Segmentation](https://lars76.github.io/neural-networks/object-detection/losses-for-segmentation/)
-  - [Thread abour Dice, F-Score and IOU](https://stats.stackexchange.com/questions/273537/f1-dice-score-vs-iou)
 
 - ### Kernels:
   - [Segmentation in PyTorch using convenient tools](https://www.kaggle.com/artgor/segmentation-in-pytorch-using-convenient-tools)
